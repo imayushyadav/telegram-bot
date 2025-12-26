@@ -141,17 +141,17 @@ bot.setWebHook(WEBHOOK_URL)
   .catch(err => console.error('Webhook error:', err));
 
 
-bot.on('message', (msg) => {
+bot.on('channel_post', (msg) => {
   // Only private storage channel
   if (msg.chat.id !== Number(process.env.PRIVATE_CHANNEL_ID)) return;
 
-  // Only files (video / document)
-  const file = (!msg.video && !msg.document);
-  if (!file) return;
+  // Only files (video or document)
+  if (!msg.video && !msg.document) return;
 
   console.log('📥 FILE DETECTED');
   console.log('Message ID:', msg.message_id);
   console.log('Chat ID:', msg.chat.id);
   console.log('Has caption:', !!msg.caption);
-  console.log('Is forwareded:', !!msg.forward_from_chat);
+  console.log('Is forwarded:', !!msg.forward_from_chat);
 });
+
