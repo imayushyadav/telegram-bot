@@ -1,3 +1,4 @@
+
 const TelegramBot = require('node-telegram-bot-api');
 const crypto = require('crypto');
 
@@ -145,10 +146,12 @@ bot.on('message', (msg) => {
   if (msg.chat.id !== Number(process.env.PRIVATE_CHANNEL_ID)) return;
 
   // Only files (video / document)
-  if (!msg.video && !msg.document) return;
+  const file = (!msg.video && !msg.document);
+  if (!file) return;
 
   console.log('📥 FILE DETECTED');
   console.log('Message ID:', msg.message_id);
   console.log('Chat ID:', msg.chat.id);
   console.log('Has caption:', !!msg.caption);
+  console.log('Is forwareded:', !!msg.forward_from_chat);
 });
