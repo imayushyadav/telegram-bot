@@ -141,7 +141,7 @@ bot.setWebHook(WEBHOOK_URL)
   .catch(err => console.error('Webhook error:', err));
 
 
-bot.on('channel_post', (msg) => {
+bot.on('message', (msg) => {
   // Only private storage channel
   if (msg.chat.id !== Number(process.env.PRIVATE_CHANNEL_ID)) return;
 
