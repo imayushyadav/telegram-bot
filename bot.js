@@ -18,7 +18,8 @@ const PRIVATE_CHANNEL_ID = -1003686844186;
 const FILE_MESSAGE_ID = 5;
 // ========================================
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+const bot = new TelegramBot(TOKEN);
+
 
 /**
  * 🔑 Create signed unlock URL (MUST MATCH server.js)
@@ -115,7 +116,39 @@ bot.on('callback_query', async (q) => {
 const express = require('express');
 const app = express();
 
+const bodyParser = require('body-parser');
+
+// parse JSON coming from Telegra
+app.use(bodyParser.json());
+
+// Webhook endpoint
+app.post('/webhook', (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Bot is alive'));
 app.listen(PORT, () => console.log('Keep-alive server running'));
 
+// tell Telegram where to send updates
+const WEBHOOK_URL = `${process.env.RENDER_EXTERNAL_URL}/webhook`;
+
+bot.setWebHook(WEBHOOK_URL)
+  .then(() => console.log('Webhook set:', WEBHOOK_URL))
+  .catch(err => console.error('Webhook error:', err));
+
+
+bot.on('message', (msg) => {
+  // Only private storage channel
+  if (msg.chat.id !== Number(process.env.PRIVATE_CHANNEL_ID)) return;
+
+  // Only files (video / document)
+  if (!msg.video && !msg.document) return;
+
+  console.log('📥 FILE DETECTED');
+  console.log('Message ID:', msg.message_id);
+  console.log('Chat ID:', msg.chat.id);
+  console.log('Has caption:', !!msg.caption);
+});
