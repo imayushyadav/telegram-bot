@@ -1,12 +1,29 @@
 
 const TelegramBot = require('node-telegram-bot-api');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+const FILE_DB_PATH = path.join(__dirname, 'files.json');
+
 
 console.log("BOT STARTED");
 
 // =============== CONFIG ==================
 const TOKEN = process.env.BOT_TOKEN; // 🔴 active token only
 const CHANNEL = '@perfecttcinema';
+
+function loadFilesDB() {
+  if (!fs.existsSync(FILE_DB_PATH)) {
+    fs.writeFileSync(FILE_DB_PATH, JSON.stringify({}, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(FILE_DB_PATH, 'utf8'));
+}
+
+function saveFilesDB(db) {
+  fs.writeFileSync(FILE_DB_PATH, JSON.stringify(db, null, 2));
+}
+
 
 // 🔐 MUST MATCH Render ENV VARIABLE
 const WEB_SECRET = process.env.WEB_SECRET;
@@ -142,22 +159,39 @@ bot.setWebHook(WEBHOOK_URL)
 
 
 bot.on('channel_post', (msg) => {
-  // only storage channel
+  // Only storage channel
   if (msg.chat.id !== Number(process.env.PRIVATE_CHANNEL_ID)) return;
 
-  const file =
-    msg.video ||
-    msg.document ||
-    msg.forward_from_chat ||
-    msg.forward_origin;
+  // Detect file (direct + forwarded)
+  const fileObj = msg.video || msg.document;
+  if (!fileObj) return;
 
-  if (!file) return;
+  const filesDB = loadFilesDB();
 
-  console.log('📥 FILE DETECTED');
-  console.log('Message ID:', msg.message_id);
-  console.log('Chat ID:', msg.chat.id);
-  console.log('Forwarded:', !!msg.forward_from_chat || !!msg.forward_origin);
-  console.log('Caption:', msg.caption || 'NO CAPTION');
+  // 🔑 Unique ID = message_id (simple & scalable)
+  const fileKey = String(msg.message_id);
+
+  // Already saved? skip
+  if (filesDB[fileKey]) {
+    console.log('⚠️ File already exists:', fileKey);
+    return;
+  }
+
+  filesDB[fileKey] = {
+    message_id: msg.message_id,
+    channel_id: msg.chat.id,
+    type: msg.video ? 'video' : 'document',
+    file_id: fileObj.file_id,
+    caption: msg.caption || null,
+    forwarded: !!msg.forward_from_chat || !!msg.forward_origin,
+    added_at: new Date().toISOString()
+  };
+
+  saveFilesDB(filesDB);
+
+  console.log('✅ FILE SAVED');
+  console.log('Key:', fileKey);
 });
+
 
 
