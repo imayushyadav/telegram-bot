@@ -4,7 +4,18 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const FILE_DB_PATH = path.join(__dirname, 'files.json');
+const FILES_PATH = path.join(__dirname, 'files.json');
+
+function readFiles() {
+  if (!fs.existsSync(FILES_PATH)) {
+    fs.writeFileSync(FILES_PATH, JSON.stringify({}));
+  }
+  return JSON.parse(fs.readFileSync(FILES_PATH, 'utf8'));
+}
+
+function saveFiles(data) {
+  fs.writeFileSync(FILES_PATH, JSON.stringify(data, null, 2));
+}
 
 
 console.log("BOT STARTED");
@@ -12,18 +23,6 @@ console.log("BOT STARTED");
 // =============== CONFIG ==================
 const TOKEN = process.env.BOT_TOKEN; // 🔴 active token only
 const CHANNEL = '@perfecttcinema';
-
-function loadFilesDB() {
-  if (!fs.existsSync(FILE_DB_PATH)) {
-    fs.writeFileSync(FILE_DB_PATH, JSON.stringify({}, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(FILE_DB_PATH, 'utf8'));
-}
-
-function saveFilesDB(db) {
-  fs.writeFileSync(FILE_DB_PATH, JSON.stringify(db, null, 2));
-}
-
 
 // 🔐 MUST MATCH Render ENV VARIABLE
 const WEB_SECRET = process.env.WEB_SECRET;
@@ -159,38 +158,37 @@ bot.setWebHook(WEBHOOK_URL)
 
 
 bot.on('channel_post', (msg) => {
-  // Only storage channel
+  // only storage channel
   if (msg.chat.id !== Number(process.env.PRIVATE_CHANNEL_ID)) return;
 
-  // Detect file (direct + forwarded)
-  const fileObj = msg.video || msg.document;
-  if (!fileObj) return;
+  const file =
+    msg.video ||
+    msg.document ||
+    msg.forward_from_chat ||
+    msg.forward_origin;
 
-  const filesDB = loadFilesDB();
+  if (!file) return;
 
-  // 🔑 Unique ID = message_id (simple & scalable)
-  const fileKey = String(msg.message_id);
+  console.log('📥 FILE DETECTED');
 
-  // Already saved? skip
-  if (filesDB[fileKey]) {
-    console.log('⚠️ File already exists:', fileKey);
-    return;
-  }
+  const files = readFiles();
 
-  filesDB[fileKey] = {
-    message_id: msg.message_id,
-    channel_id: msg.chat.id,
+  const fileId =
+    msg.video?.file_id ||
+    msg.document?.file_id;
+
+  files[msg.message_id] = {
+    file_id: fileId,
     type: msg.video ? 'video' : 'document',
-    file_id: fileObj.file_id,
-    caption: msg.caption || null,
+    caption: msg.caption || '',
     forwarded: !!msg.forward_from_chat || !!msg.forward_origin,
-    added_at: new Date().toISOString()
+    date: msg.date
   };
 
-  saveFilesDB(filesDB);
+  saveFiles(files);
 
-  console.log('✅ FILE SAVED');
-  console.log('Key:', fileKey);
+  console.log('✅ SAVED TO files.json');
+  console.log('Message ID:', msg.message_id);
 });
 
 
