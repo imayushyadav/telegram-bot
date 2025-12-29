@@ -7,6 +7,7 @@ const crypto = require('crypto');
 console.log('BOT STARTED');
 
 /* ================= ENV ================= */
+
 const TOKEN = process.env.BOT_TOKEN;
 const PRIVATE_CHANNEL_ID = Number(process.env.PRIVATE_CHANNEL_ID);
 const PUBLIC_CHANNEL_ID = Number(process.env.PUBLIC_CHANNEL_ID);
@@ -19,6 +20,7 @@ const FORCE_CHANNELS = ['@perfecttcinema'];
 const bot = new TelegramBot(TOKEN);
 
 /* ================= DB ================= */
+
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Error:', err));
@@ -30,60 +32,75 @@ const FileMap = mongoose.model('FileMap', new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }));
 
+/* ================= POSTER MEMORY ================= */
+
+let LAST_POSTER = null;
+
 /* ================= STORAGE LISTENER ================= */
 
 bot.on('channel_post', async (msg) => {
   if (msg.chat.id !== PRIVATE_CHANNEL_ID) return;
 
+  /* ---- 1️⃣ POSTER ---- */
+  if (msg.photo) {
+    LAST_POSTER = {
+      file_id: msg.photo[msg.photo.length - 1].file_id,
+      caption: msg.caption || '🎬 Movie Available'
+    };
+    console.log('🖼️ POSTER STORED');
+    return;
+  }
+
+  /* ---- 2️⃣ FILE ---- */
   const file = msg.video || msg.document;
-  if (!file) return; // Only react to actual file uploads
+  if (!file) return;
+
+  if (!LAST_POSTER) {
+    console.log('⚠️ FILE RECEIVED WITHOUT POSTER — SKIPPED');
+    return;
+  }
 
   const fid = crypto.randomBytes(6).toString('hex');
 
   try {
-    // 🔹 Save mapping in MongoDB
     await FileMap.create({
       fid,
       channelId: msg.chat.id,
       messageId: msg.message_id
     });
 
-    console.log(`✅ FILE STORED: ${fid}`);
-
-    // 🔹 Prepare caption for public post
     const caption = `
-🎬 ${msg.caption || 'New Movie Uploaded!'}
+🎬 ${LAST_POSTER.caption}
 
 ━━━━━━━━━━━━━━
 ⬇️ Click below to download
 ━━━━━━━━━━━━━━
 `.trim();
 
-    // 🔹 Inline buttons for public channel post
-    const keyboard = {
-      inline_keyboard: [
-        [
-          { text: '⬇️ Download', url: `https://t.me/${BOT_USERNAME}?start=f_${fid}` }
-        ],
-        [
-          { text: '⭐ Premium', url: 'https://t.me/+UvanPUhXGcoxNGI1' }
-        ]
-      ]
-    };
-
-    // 🔹 Handle thumbnail properly
-    if (msg.video?.thumbnail?.file_id) {
-      // Use the thumbnail if available
-      await bot.sendPhoto(PUBLIC_CHANNEL_ID, msg.video.thumbnail.file_id, {
+    await bot.sendPhoto(
+      PUBLIC_CHANNEL_ID,
+      LAST_POSTER.file_id,
+      {
         caption,
-        reply_markup: keyboard
-      });
-      console.log('📸 Thumbnail + Caption posted to Public Channel');
-    } else {
-      // If no thumbnail, just send text
-      await bot.sendMessage(PUBLIC_CHANNEL_ID, caption, { reply_markup: keyboard });
-      console.log('📝 Caption-only post (no thumbnail)');
-    }
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '⬇️ Download',
+                url: `https://t.me/${BOT_USERNAME}?start=f_${fid}`
+              }
+            ],
+            [
+              { text: '⭐ Premium', url: 'https://t.me/+UvanPUhXGcoxNGI1' }
+            ]
+          ]
+        }
+      }
+    );
+
+    console.log('📢 AUTO POSTED:', fid);
+
+    LAST_POSTER = null; // reset after use
 
   } catch (e) {
     console.error('❌ AUTO POST ERROR:', e.message);
@@ -91,11 +108,14 @@ bot.on('channel_post', async (msg) => {
 });
 
 /* ================= FORCE JOIN ================= */
+
 async function checkForceJoin(userId) {
   for (const ch of FORCE_CHANNELS) {
     try {
       const m = await bot.getChatMember(ch, userId);
-      if (!['member', 'administrator', 'creator'].includes(m.status)) return false;
+      if (!['member', 'administrator', 'creator'].includes(m.status)) {
+        return false;
+      }
     } catch {
       return false;
     }
@@ -104,11 +124,13 @@ async function checkForceJoin(userId) {
 }
 
 /* ================= START ================= */
+
 bot.onText(/^\/start$/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Use Download button from channel.');
 });
 
 /* ================= DOWNLOAD FLOW ================= */
+
 bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -118,7 +140,7 @@ bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   if (!row) return bot.sendMessage(chatId, '❌ File not found');
 
   if (!(await checkForceJoin(userId))) {
-    return bot.sendMessage(chatId, '📢 Join our channel first', {
+    return bot.sendMessage(chatId, '📢 Join channel first', {
       reply_markup: {
         inline_keyboard: [
           [{ text: 'Join Channel', url: 'https://t.me/perfecttcinema' }],
@@ -139,6 +161,7 @@ bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
 });
 
 /* ================= RECHECK ================= */
+
 bot.on('callback_query', async (q) => {
   if (!q.data.startsWith('recheck_')) return;
 
@@ -165,6 +188,7 @@ bot.on('callback_query', async (q) => {
 });
 
 /* ================= VERIFY ================= */
+
 bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
 
@@ -193,6 +217,7 @@ bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
 });
 
 /* ================= WEBHOOK ================= */
+
 const app = express();
 app.use(bodyParser.json());
 
