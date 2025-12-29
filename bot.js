@@ -4,73 +4,66 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-/* ================= BASIC SETUP ================= */
-
 console.log('BOT STARTED');
 
+/* ================= ENV ================= */
 const TOKEN = process.env.BOT_TOKEN;
 const PRIVATE_CHANNEL_ID = Number(process.env.PRIVATE_CHANNEL_ID);
 const PUBLIC_CHANNEL_ID = Number(process.env.PUBLIC_CHANNEL_ID);
 const BOT_USERNAME = process.env.BOT_USERNAME;
 const WEB_SECRET = process.env.WEB_SECRET;
+const BASE_URL = process.env.RENDER_EXTERNAL_URL;
 
-const FORCE_CHANNELS = [
-  '@perfecttcinema' // ❗ ONLY CHANNEL, NO GROUP
-];
+const FORCE_CHANNELS = ['@perfecttcinema'];
 
 const bot = new TelegramBot(TOKEN);
 
-/* ================= MONGODB ================= */
-
+/* ================= DB ================= */
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Error:', err));
 
-const fileMapSchema = new mongoose.Schema({
+const FileMap = mongoose.model('FileMap', new mongoose.Schema({
   fid: { type: String, unique: true },
   channelId: Number,
   messageId: Number,
-  type: String,
   createdAt: { type: Date, default: Date.now }
-});
+}));
 
-const FileMap = mongoose.model('FileMap', fileMapSchema);
-
-/* ================= STORAGE → PUBLIC POST ================= */
+/* ================= STORAGE LISTENER ================= */
 
 bot.on('channel_post', async (msg) => {
   if (msg.chat.id !== PRIVATE_CHANNEL_ID) return;
 
   const file = msg.video || msg.document;
-  if (!file) return;
+  if (!file) return; // Only react to actual file uploads
 
   const fid = crypto.randomBytes(6).toString('hex');
 
   try {
+    // 🔹 Save mapping in MongoDB
     await FileMap.create({
       fid,
       channelId: msg.chat.id,
-      messageId: msg.message_id,
-      type: msg.video ? 'video' : 'document'
+      messageId: msg.message_id
     });
 
-    console.log('✅ FILE STORED:', fid);
+    console.log(`✅ FILE STORED: ${fid}`);
 
+    // 🔹 Prepare caption for public post
     const caption = `
-🎬 ${msg.caption || 'Movie Available'}
+🎬 ${msg.caption || 'New Movie Uploaded!'}
 
 ━━━━━━━━━━━━━━
 ⬇️ Click below to download
 ━━━━━━━━━━━━━━
 `.trim();
 
+    // 🔹 Inline buttons for public channel post
     const keyboard = {
       inline_keyboard: [
         [
-          {
-            text: '⬇️ Download',
-            url: `https://t.me/${BOT_USERNAME}?start=f_${fid}`
-          }
+          { text: '⬇️ Download', url: `https://t.me/${BOT_USERNAME}?start=f_${fid}` }
         ],
         [
           { text: '⭐ Premium', url: 'https://t.me/+UvanPUhXGcoxNGI1' }
@@ -78,45 +71,31 @@ bot.on('channel_post', async (msg) => {
       ]
     };
 
-    // PUBLIC POST SHOULD ONLY USE REAL PHOTO
-const lastPoster = msg.reply_to_message?.photo;
-
-if (lastPoster) {
-  await bot.sendPhoto(
-    PUBLIC_CHANNEL_ID,
-    lastPoster[lastPoster.length - 1].file_id,
-    {
-      caption,
-      reply_markup: keyboard
+    // 🔹 Handle thumbnail properly
+    if (msg.video?.thumbnail?.file_id) {
+      // Use the thumbnail if available
+      await bot.sendPhoto(PUBLIC_CHANNEL_ID, msg.video.thumbnail.file_id, {
+        caption,
+        reply_markup: keyboard
+      });
+      console.log('📸 Thumbnail + Caption posted to Public Channel');
+    } else {
+      // If no thumbnail, just send text
+      await bot.sendMessage(PUBLIC_CHANNEL_ID, caption, { reply_markup: keyboard });
+      console.log('📝 Caption-only post (no thumbnail)');
     }
-  );
-  console.log('📢 POSTED USING POSTER IMAGE');
-} else {
-  await bot.sendMessage(
-    PUBLIC_CHANNEL_ID,
-    caption,
-    { reply_markup: keyboard }
-  );
-  console.log('📢 POSTED WITHOUT IMAGE (NO POSTER FOUND)');
-}
 
-
-    console.log('📢 AUTO POSTED TO PUBLIC CHANNEL');
-
-  } catch (err) {
-    console.error('❌ AUTO POST ERROR:', err.message);
+  } catch (e) {
+    console.error('❌ AUTO POST ERROR:', e.message);
   }
 });
 
 /* ================= FORCE JOIN ================= */
-
 async function checkForceJoin(userId) {
   for (const ch of FORCE_CHANNELS) {
     try {
       const m = await bot.getChatMember(ch, userId);
-      if (!['member', 'administrator', 'creator'].includes(m.status)) {
-        return false;
-      }
+      if (!['member', 'administrator', 'creator'].includes(m.status)) return false;
     } catch {
       return false;
     }
@@ -125,13 +104,11 @@ async function checkForceJoin(userId) {
 }
 
 /* ================= START ================= */
-
 bot.onText(/^\/start$/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Use Download button from channel.');
 });
 
-/* ================= ADS GATE ================= */
-
+/* ================= DOWNLOAD FLOW ================= */
 bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -154,15 +131,14 @@ bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   bot.sendMessage(chatId, '🔓 Choose ONE option:', {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🎥 Watch Video', url: `${process.env.RENDER_EXTERNAL_URL}/ads/video?uid=${userId}&fid=${fid}` }],
-        [{ text: '🔗 Shortlink', url: `${process.env.RENDER_EXTERNAL_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
+        [{ text: '🎥 Watch Video', url: `${BASE_URL}/ads/video?uid=${userId}&fid=${fid}` }],
+        [{ text: '🔗 Shortlink', url: `${BASE_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
       ]
     }
   });
 });
 
 /* ================= RECHECK ================= */
-
 bot.on('callback_query', async (q) => {
   if (!q.data.startsWith('recheck_')) return;
 
@@ -181,15 +157,14 @@ bot.on('callback_query', async (q) => {
   bot.sendMessage(q.message.chat.id, '🔓 Choose ONE option:', {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🎥 Watch Video', url: `${process.env.RENDER_EXTERNAL_URL}/ads/video?uid=${userId}&fid=${fid}` }],
-        [{ text: '🔗 Shortlink', url: `${process.env.RENDER_EXTERNAL_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
+        [{ text: '🎥 Watch Video', url: `${BASE_URL}/ads/video?uid=${userId}&fid=${fid}` }],
+        [{ text: '🔗 Shortlink', url: `${BASE_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
       ]
     }
   });
 });
 
 /* ================= VERIFY ================= */
-
 bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
 
@@ -218,7 +193,6 @@ bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
 });
 
 /* ================= WEBHOOK ================= */
-
 const app = express();
 app.use(bodyParser.json());
 
@@ -232,4 +206,4 @@ app.get('/', (_, res) => res.send('Bot alive'));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT);
 
-bot.setWebHook(`${process.env.RENDER_EXTERNAL_URL}/webhook`);
+bot.setWebHook(`${BASE_URL}/webhook`);
