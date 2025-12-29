@@ -4,23 +4,23 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-/* ================== BASIC SETUP ================== */
+/* ================= BASIC SETUP ================= */
 
 console.log('BOT STARTED');
 
 const TOKEN = process.env.BOT_TOKEN;
 const PRIVATE_CHANNEL_ID = Number(process.env.PRIVATE_CHANNEL_ID);
+const PUBLIC_CHANNEL_ID = Number(process.env.PUBLIC_CHANNEL_ID);
 const BOT_USERNAME = process.env.BOT_USERNAME;
 const WEB_SECRET = process.env.WEB_SECRET;
 
 const FORCE_CHANNELS = [
-  '@perfecttcinema',
-  '@perfectcinemadiscussion'
+  '@perfecttcinema' // ❗ ONLY CHANNEL, NO GROUP
 ];
 
 const bot = new TelegramBot(TOKEN);
 
-/* ================== MONGODB ================== */
+/* ================= MONGODB ================= */
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
@@ -36,22 +36,17 @@ const fileMapSchema = new mongoose.Schema({
 
 const FileMap = mongoose.model('FileMap', fileMapSchema);
 
-/* ================== STORAGE → AUTO PUBLIC POST ================== */
-
-const PUBLIC_CHANNEL_ID = Number(process.env.PUBLIC_CHANNEL_ID);
+/* ================= STORAGE → PUBLIC POST ================= */
 
 bot.on('channel_post', async (msg) => {
   if (msg.chat.id !== PRIVATE_CHANNEL_ID) return;
 
-  // Only accept video or document
   const file = msg.video || msg.document;
   if (!file) return;
 
-  // Generate unique file id
   const fid = crypto.randomBytes(6).toString('hex');
 
   try {
-    // Save mapping in DB
     await FileMap.create({
       fid,
       channelId: msg.chat.id,
@@ -61,39 +56,14 @@ bot.on('channel_post', async (msg) => {
 
     console.log('✅ FILE STORED:', fid);
 
-    // AFTER FileMap.create(...)
-await bot.copyMessage(
-  PUBLIC_CHANNEL_ID,   // public channel
-  msg.chat.id,         // private storage
-  msg.message_id,
-  {
-    caption: msg.caption || '🎬 Movie Available',
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: '⬇️ Download',
-            url: `https://t.me/${BOT_USERNAME}?start=f_${fid}`
-          }
-        ]
-      ]
-    }
-  }
-);
-
-
-    /* ---------- PUBLIC CAPTION ---------- */
-    const originalCaption = msg.caption || '';
-
-    const publicCaption = `
-🎬 ${originalCaption}
+    const caption = `
+🎬 ${msg.caption || 'Movie Available'}
 
 ━━━━━━━━━━━━━━
 ⬇️ Click below to download
 ━━━━━━━━━━━━━━
 `.trim();
 
-    /* ---------- DOWNLOAD BUTTON ---------- */
     const keyboard = {
       inline_keyboard: [
         [
@@ -103,34 +73,21 @@ await bot.copyMessage(
           }
         ],
         [
-          {
-            text: '💾 Backup',
-            callback_data: `backup_${fid}`
-          },
-          {
-            text: '⭐ Premium',
-            url: 'https://t.me/+UvanPUhXGcoxNGI1'
-          }
+          { text: '⭐ Premium', url: 'https://t.me/+UvanPUhXGcoxNGI1' }
         ]
       ]
     };
 
-    /* ---------- SEND TO PUBLIC CHANNEL ---------- */
-    if (msg.video && msg.video.thumb) {
-      // Send thumbnail + caption
+    if (msg.video?.thumb) {
       await bot.sendPhoto(
         PUBLIC_CHANNEL_ID,
         msg.video.thumb.file_id,
-        {
-          caption: publicCaption,
-          reply_markup: keyboard
-        }
+        { caption, reply_markup: keyboard }
       );
     } else {
-      // Fallback (no thumbnail)
       await bot.sendMessage(
         PUBLIC_CHANNEL_ID,
-        publicCaption,
+        caption,
         { reply_markup: keyboard }
       );
     }
@@ -138,18 +95,19 @@ await bot.copyMessage(
     console.log('📢 AUTO POSTED TO PUBLIC CHANNEL');
 
   } catch (err) {
-    console.error('❌ AUTO POST ERROR:', err);
+    console.error('❌ AUTO POST ERROR:', err.message);
   }
 });
 
-
-/* ================== FORCE JOIN ================== */
+/* ================= FORCE JOIN ================= */
 
 async function checkForceJoin(userId) {
   for (const ch of FORCE_CHANNELS) {
     try {
       const m = await bot.getChatMember(ch, userId);
-      if (!['member', 'administrator', 'creator'].includes(m.status)) return false;
+      if (!['member', 'administrator', 'creator'].includes(m.status)) {
+        return false;
+      }
     } catch {
       return false;
     }
@@ -157,13 +115,13 @@ async function checkForceJoin(userId) {
   return true;
 }
 
-/* ================== START ================== */
+/* ================= START ================= */
 
 bot.onText(/^\/start$/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Use Download button from channel.');
 });
 
-/* ================== ADS GATE ================== */
+/* ================= ADS GATE ================= */
 
 bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -174,12 +132,10 @@ bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   if (!row) return bot.sendMessage(chatId, '❌ File not found');
 
   if (!(await checkForceJoin(userId))) {
-    return bot.sendMessage(chatId, '📢 Join required channels', {
+    return bot.sendMessage(chatId, '📢 Join our channel first', {
       reply_markup: {
         inline_keyboard: [
-          ...FORCE_CHANNELS.map(ch => [
-            { text: `Join ${ch}`, url: `https://t.me/${ch.replace('@','')}` }
-          ]),
+          [{ text: 'Join Channel', url: 'https://t.me/perfecttcinema' }],
           [{ text: '✅ I Joined', callback_data: `recheck_${fid}` }]
         ]
       }
@@ -196,7 +152,7 @@ bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   });
 });
 
-/* ================== FORCE JOIN RECHECK ================== */
+/* ================= RECHECK ================= */
 
 bot.on('callback_query', async (q) => {
   if (!q.data.startsWith('recheck_')) return;
@@ -205,7 +161,10 @@ bot.on('callback_query', async (q) => {
   const userId = q.from.id;
 
   if (!(await checkForceJoin(userId))) {
-    return bot.answerCallbackQuery(q.id, { text: 'Join all channels first', show_alert: true });
+    return bot.answerCallbackQuery(q.id, {
+      text: 'Join channel first',
+      show_alert: true
+    });
   }
 
   bot.answerCallbackQuery(q.id);
@@ -220,7 +179,7 @@ bot.on('callback_query', async (q) => {
   });
 });
 
-/* ================== VERIFY FROM WEB ================== */
+/* ================= VERIFY ================= */
 
 bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -234,7 +193,8 @@ bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
 
   const { uid, fid, method, ts, token } = data;
 
-  const check = crypto.createHmac('sha256', WEB_SECRET)
+  const check = crypto
+    .createHmac('sha256', WEB_SECRET)
     .update(`${uid}:${fid}:${method}:${ts}`)
     .digest('hex');
 
@@ -248,7 +208,7 @@ bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
   await bot.forwardMessage(chatId, row.channelId, row.messageId);
 });
 
-/* ================== WEBHOOK ================== */
+/* ================= WEBHOOK ================= */
 
 const app = express();
 app.use(bodyParser.json());
