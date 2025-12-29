@@ -78,19 +78,28 @@ bot.on('channel_post', async (msg) => {
       ]
     };
 
-    if (msg.video?.thumb) {
-      await bot.sendPhoto(
-        PUBLIC_CHANNEL_ID,
-        msg.video.thumb.file_id,
-        { caption, reply_markup: keyboard }
-      );
-    } else {
-      await bot.sendMessage(
-        PUBLIC_CHANNEL_ID,
-        caption,
-        { reply_markup: keyboard }
-      );
+    // PUBLIC POST SHOULD ONLY USE REAL PHOTO
+const lastPoster = msg.reply_to_message?.photo;
+
+if (lastPoster) {
+  await bot.sendPhoto(
+    PUBLIC_CHANNEL_ID,
+    lastPoster[lastPoster.length - 1].file_id,
+    {
+      caption,
+      reply_markup: keyboard
     }
+  );
+  console.log('📢 POSTED USING POSTER IMAGE');
+} else {
+  await bot.sendMessage(
+    PUBLIC_CHANNEL_ID,
+    caption,
+    { reply_markup: keyboard }
+  );
+  console.log('📢 POSTED WITHOUT IMAGE (NO POSTER FOUND)');
+}
+
 
     console.log('📢 AUTO POSTED TO PUBLIC CHANNEL');
 
