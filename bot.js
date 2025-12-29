@@ -61,6 +61,27 @@ bot.on('channel_post', async (msg) => {
 
     console.log('✅ FILE STORED:', fid);
 
+    // AFTER FileMap.create(...)
+await bot.copyMessage(
+  PUBLIC_CHANNEL_ID,   // public channel
+  msg.chat.id,         // private storage
+  msg.message_id,
+  {
+    caption: msg.caption || '🎬 Movie Available',
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: '⬇️ Download',
+            url: `https://t.me/${BOT_USERNAME}?start=f_${fid}`
+          }
+        ]
+      ]
+    }
+  }
+);
+
+
     /* ---------- PUBLIC CAPTION ---------- */
     const originalCaption = msg.caption || '';
 
