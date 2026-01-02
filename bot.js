@@ -227,7 +227,7 @@ bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
 
 const app = express();
 
-// IMPORTANT: raw body accept
+// IMPORTANT: raw body accept (Telegram needs this)
 app.use(express.json({ type: '*/*' }));
 
 app.post('/webhook', (req, res) => {
@@ -241,13 +241,26 @@ app.post('/webhook', (req, res) => {
 app.get('/', (_, res) => res.send('Bot alive'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log('🚀 Server listening on', PORT);
-
-  // HARD RESET webhook
-  await bot.deleteWebHook();
-  console.log('🧹 Old webhook deleted');
-
-  await bot.setWebHook(`${process.env.BOT_BASE_URL}/webhook`);
-  console.log('✅ New webhook set to', `${process.env.BOT_BASE_URL}/webhook`);
 });
+
+/* ================= SET WEBHOOK (SAFE) ================= */
+
+(async () => {
+  const url = `${process.env.BOT_BASE_URL}/webhook`;
+
+  try {
+    const info = await bot.getWebHookInfo();
+
+    if (info.url !== url) {
+      await bot.setWebHook(url);
+      console.log('✅ Webhook set to', url);
+    } else {
+      console.log('ℹ️ Webhook already set');
+    }
+  } catch (e) {
+    console.error('❌ Webhook setup failed:', e.message);
+  }
+})();
+
