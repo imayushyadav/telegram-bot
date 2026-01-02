@@ -232,9 +232,14 @@ bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
 /* ================= WEBHOOK ================= */
 
 const app = express();
-app.use(bodyParser.json());
+
+// IMPORTANT: raw body accept
+app.use(express.json({ type: '*/*' }));
 
 app.post('/webhook', (req, res) => {
+  console.log('🔥 WEBHOOK HIT');
+  console.log(JSON.stringify(req.body, null, 2));
+
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
@@ -242,9 +247,13 @@ app.post('/webhook', (req, res) => {
 app.get('/', (_, res) => res.send('Bot alive'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT);
+app.listen(PORT, async () => {
+  console.log('🚀 Server listening on', PORT);
 
-const BOT_BASE_URL = process.env.BOT_BASE_URL;
+  // HARD RESET webhook
+  await bot.deleteWebHook();
+  console.log('🧹 Old webhook deleted');
 
-bot.setWebHook(`${process.env.BOT_BASE_URL}/webhook`);
-
+  await bot.setWebHook(`${process.env.BOT_BASE_URL}/webhook`);
+  console.log('✅ New webhook set to', `${process.env.BOT_BASE_URL}/webhook`);
+});
