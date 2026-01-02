@@ -205,7 +205,7 @@ bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
 
   const { uid, fid } = data;
 
-  if (uid !== chatId) {
+  if (Number(uid) !== chatId) {
     return bot.sendMessage(chatId, '❌ Access denied');
   }
 
