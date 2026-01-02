@@ -192,42 +192,36 @@ bot.on('callback_query', async (q) => {
 /* ================= VERIFY ================= */
 
 bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
-  console.log('VERIFY START HIT', msg.chat.id); // 👈 ADD
-
   const chatId = msg.chat.id;
 
   let data;
   try {
-    data = JSON.parse(Buffer.from(match[1], 'base64').toString());
+    data = JSON.parse(
+      Buffer.from(match[1], 'base64').toString()
+    );
   } catch {
-    console.log('PAYLOAD DECODE FAIL'); // 👈 ADD
-    return bot.sendMessage(chatId, '❌ Invalid verification');
+    return bot.sendMessage(chatId, '❌ Invalid link');
   }
 
-  console.log('PAYLOAD OK', data); // 👈 ADD
+  const { uid, fid } = data;
 
-  const { uid, fid, method, ts, token } = data;
-
-  const check = crypto
-    .createHmac('sha256', WEB_SECRET)
-    .update(`${uid}:${fid}:${method}:${ts}`)
-    .digest('hex');
-
-  if (uid !== chatId || check !== token) {
-    console.log('HMAC FAIL'); // 👈 ADD
-    return bot.sendMessage(chatId, '❌ Verification failed');
+  if (uid !== chatId) {
+    return bot.sendMessage(chatId, '❌ Access denied');
   }
-
-  console.log('VERIFIED OK'); // 👈 ADD
 
   const row = await FileMap.findOne({ fid });
-  console.log('DB ROW', row); // 👈 ADD
+  if (!row) {
+    return bot.sendMessage(chatId, '❌ File expired');
+  }
 
-  if (!row) return bot.sendMessage(chatId, '❌ File not found');
+  await bot.forwardMessage(
+    chatId,
+    row.channelId,
+    row.messageId
+  );
 
-  await bot.forwardMessage(chatId, row.channelId, row.messageId);
+  console.log('✅ FILE SENT:', fid);
 });
-
 
 /* ================= WEBHOOK ================= */
 
