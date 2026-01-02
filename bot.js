@@ -191,7 +191,7 @@ bot.on('callback_query', async (q) => {
 
 /* ================= VERIFY ================= */
 
-bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
+bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
   console.log('VERIFY START HIT', msg.chat.id); // 👈 ADD
 
   const chatId = msg.chat.id;
