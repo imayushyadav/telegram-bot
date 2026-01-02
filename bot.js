@@ -13,11 +13,13 @@ const PRIVATE_CHANNEL_ID = Number(process.env.PRIVATE_CHANNEL_ID);
 const PUBLIC_CHANNEL_ID = Number(process.env.PUBLIC_CHANNEL_ID);
 const BOT_USERNAME = process.env.BOT_USERNAME;
 const WEB_SECRET = process.env.WEB_SECRET;
-const BASE_URL = process.env.RENDER_EXTERNAL_URL;
+const UNLOCK_BASE_URL = process.env.UNLOCK_BASE_URL;
+
 
 const FORCE_CHANNELS = ['@perfecttcinema'];
 
-const bot = new TelegramBot(TOKEN);
+const bot = new TelegramBot(TOKEN, { polling: false });
+
 
 /* ================= DB ================= */
 
@@ -153,8 +155,8 @@ bot.onText(/\/start\s+f_(.+)/, async (msg, match) => {
   bot.sendMessage(chatId, '🔓 Choose ONE option:', {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🎥 Watch Video', url: `${BASE_URL}/ads/video?uid=${userId}&fid=${fid}` }],
-        [{ text: '🔗 Shortlink', url: `${BASE_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
+        [{ text: '🎥 Watch Video', url: `${UNLOCK_BASE_URL}/ads/video?uid=${userId}&fid=${fid}` }],
+        [{ text: '🔗 Shortlink', url: `${UNLOCK_BASE_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
       ]
     }
   });
@@ -180,8 +182,8 @@ bot.on('callback_query', async (q) => {
   bot.sendMessage(q.message.chat.id, '🔓 Choose ONE option:', {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🎥 Watch Video', url: `${BASE_URL}/ads/video?uid=${userId}&fid=${fid}` }],
-        [{ text: '🔗 Shortlink', url: `${BASE_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
+        [{ text: '🎥 Watch Video', url: `${UNLOCK_BASE_URL}/ads/video?uid=${userId}&fid=${fid}` }],
+        [{ text: '🔗 Shortlink', url: `${UNLOCK_BASE_URL}/ads/shortlink?uid=${userId}&fid=${fid}` }]
       ]
     }
   });
@@ -189,7 +191,7 @@ bot.on('callback_query', async (q) => {
 
 /* ================= VERIFY ================= */
 
-bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
+bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
 
   let data;
@@ -231,4 +233,6 @@ app.get('/', (_, res) => res.send('Bot alive'));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT);
 
-bot.setWebHook(`${BASE_URL}/webhook`);
+const BOT_BASE_URL = process.env.BOT_BASE_URL;
+
+bot.setWebHook(`${BOT_BASE_URL}/webhook`);
