@@ -192,14 +192,19 @@ bot.on('callback_query', async (q) => {
 /* ================= VERIFY ================= */
 
 bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
+  console.log('VERIFY START HIT', msg.chat.id); // 👈 ADD
+
   const chatId = msg.chat.id;
 
   let data;
   try {
     data = JSON.parse(Buffer.from(match[1], 'base64').toString());
   } catch {
+    console.log('PAYLOAD DECODE FAIL'); // 👈 ADD
     return bot.sendMessage(chatId, '❌ Invalid verification');
   }
+
+  console.log('PAYLOAD OK', data); // 👈 ADD
 
   const { uid, fid, method, ts, token } = data;
 
@@ -209,14 +214,20 @@ bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
     .digest('hex');
 
   if (uid !== chatId || check !== token) {
+    console.log('HMAC FAIL'); // 👈 ADD
     return bot.sendMessage(chatId, '❌ Verification failed');
   }
 
+  console.log('VERIFIED OK'); // 👈 ADD
+
   const row = await FileMap.findOne({ fid });
+  console.log('DB ROW', row); // 👈 ADD
+
   if (!row) return bot.sendMessage(chatId, '❌ File not found');
 
   await bot.forwardMessage(chatId, row.channelId, row.messageId);
 });
+
 
 /* ================= WEBHOOK ================= */
 
