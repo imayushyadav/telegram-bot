@@ -191,7 +191,7 @@ bot.on('callback_query', async (q) => {
 
 /* ================= VERIFY ================= */
 
-bot.onText(/\/verify\s+(.+)/, async (msg, match) => {
+bot.onText(/\/start\s+verify_(.+)/, async (msg, match) => {
   console.log('VERIFY START HIT', msg.chat.id); // 👈 ADD
 
   const chatId = msg.chat.id;
@@ -246,4 +246,5 @@ app.listen(PORT);
 
 const BOT_BASE_URL = process.env.BOT_BASE_URL;
 
-bot.setWebHook(`${BOT_BASE_URL}/webhook`);
+bot.setWebHook(`${process.env.BOT_BASE_URL}/webhook`);
+
